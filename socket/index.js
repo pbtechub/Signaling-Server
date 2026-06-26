@@ -1,0 +1,25 @@
+const roomSocket = require("./room.socket");
+
+const webrtcSocket = require("./webrtc.socket");
+
+const chatSocket = require("./chat.socket");
+
+const sessionSocket = require("./session.socket");
+
+const registerHandRaise = require("./handRaise.socket");
+
+module.exports = (io) => {
+  io.on("connection", (socket) => {
+    console.log("Connected", socket.id);
+
+    roomSocket(io, socket);
+
+    webrtcSocket(io, socket);
+
+    chatSocket(io, socket);
+
+    sessionSocket(io, socket);
+
+    registerHandRaise(io,socket);
+  });
+};
