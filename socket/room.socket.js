@@ -46,6 +46,56 @@ module.exports = (io, socket) => {
     }
   });
 
+  // START SESSION (Tutor only)
+
+  socket.on("start-session", ({ roomId }) => {
+    const { getRoom } = require("../store/room.store");
+
+    const room = getRoom(roomId);
+
+    if (!room) {
+      socket.emit("session-error", {
+        message: "Room not found",
+      });
+
+      return;
+    }
+
+    // only tutor can start
+
+    if (room.tutor !== socket.id) {
+      socket.emit("session-error", {
+        message: "Only tutor can start session",
+      });
+
+      return;
+    }
+
+    // prevent duplicate start
+
+    if (room.status === "active") {
+      return;
+    }
+
+    room.status = "active";
+    const duration = room.duration ?? 0;
+
+    const startedAt = Date.now();
+    const endsAt = startedAt + duration * 60 * 1000;
+
+    room.startedAt = startedAt;
+    room.endsAt = endsAt;
+    room.duration = duration;
+
+    const payload = {
+      startedAt,
+      endsAt,
+      duration,
+    };
+
+    io.to(roomId).emit("session-started", payload);
+  });
+
   socket.on("leave-room", (data) => {
     const { roomId } = data;
 
@@ -57,20 +107,6 @@ module.exports = (io, socket) => {
 
     socket.leave(roomId);
   });
-
-  // socket.on("disconnect", () => {
-  //   console.log("Temporary disconnect:", socket.id);
-
-  //   timers[socket.id] = setTimeout(() => {
-  //     if (joinedRoom) {
-  //       removeUser(joinedRoom, socket.id);
-
-  //       socket.to(joinedRoom).emit("user-disconnected", {
-  //         id: socket.id,
-  //       });
-  //     }
-  //   }, 10000);
-  // });
 
   socket.on("disconnect", () => {
     console.log("Temporary disconnect:", socket.id);
