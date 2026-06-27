@@ -47,37 +47,70 @@
 
 const { createRoom, getRoom, removeRoom } = require("../store/room.store");
 
+// const addUser = (roomId, user) => {
+//   const room = createRoom(roomId);
+
+//   if (user.role === "tutor") {
+//     // allow tutor refresh
+//     if (room.tutor) {
+//       room.tutor = user.id;
+
+//       return {
+//         success: true,
+//         refreshed: true,
+//         room,
+//       };
+//     }
+
+//     room.tutor = user.id;
+//   }
+
+//   if (user.role === "learner") {
+//     if (room.learner) {
+//       return {
+//         success: false,
+//         message: "Learner already joined",
+//       };
+//     }
+
+//     room.learner = user.id;
+//   }
+
+//   return {
+//     success: true,
+//     room,
+//   };
+// };
+
 const addUser = (roomId, user) => {
   const room = createRoom(roomId);
 
+  let refreshed = false;
+
   if (user.role === "tutor") {
-    // allow tutor refresh
     if (room.tutor) {
+      // same role reconnecting after refresh
+      refreshed = true;
+
       room.tutor = user.id;
-
-      return {
-        success: true,
-        refreshed: true,
-        room,
-      };
+    } else {
+      room.tutor = user.id;
     }
-
-    room.tutor = user.id;
   }
 
   if (user.role === "learner") {
     if (room.learner) {
-      return {
-        success: false,
-        message: "Learner already joined",
-      };
-    }
+      refreshed = true;
 
-    room.learner = user.id;
+      room.learner = user.id;
+    } else {
+      room.learner = user.id;
+    }
   }
 
   return {
     success: true,
+    refreshed,
     room,
   };
 };

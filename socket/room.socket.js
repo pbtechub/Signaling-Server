@@ -121,17 +121,7 @@ module.exports = (io, socket) => {
     socket.leave(roomId);
   });
 
-  // socket.on("disconnect", () => {
-  //   console.log("Disconnected:", socket.id);
 
-  //   if (joinedRoom) {
-  //     removeUser(joinedRoom, socket.id);
-
-  //     socket.to(joinedRoom).emit("user-left", {
-  //       id: socket.id,
-  //     });
-  //   }
-  // });
 
   socket.on("disconnect", () => {
     console.log("Temporary disconnect:", socket.id);
@@ -140,7 +130,7 @@ module.exports = (io, socket) => {
       if (joinedRoom) {
         removeUser(joinedRoom, socket.id);
 
-        socket.to(joinedRoom).emit("user-left", {
+        socket.to(joinedRoom).emit("user-disconnected", {
           id: socket.id,
         });
       }
