@@ -109,17 +109,19 @@ module.exports = (io, socket) => {
 
   // DISCONNECT (browser close / refresh)
 
+  // socket.on("disconnect", () => {
+  //   const rooms = require("../store/room.store").rooms;
+
+  //   for (const roomId in rooms) {
+  //     removeUser(roomId, socket.id);
+
+  //     socket.to(roomId).emit("user-left", {
+  //       id: socket.id,
+  //     });
+  //   }
+  // });
+
   socket.on("disconnect", () => {
-    console.log("Disconnected:", socket.id);
-
-    const rooms = require("../store/room.store").rooms;
-
-    for (const roomId in rooms) {
-      removeUser(roomId, socket.id);
-
-      socket.to(roomId).emit("user-left", {
-        id: socket.id,
-      });
-    }
+    console.log("Temporary disconnect:", socket.id);
   });
 };
