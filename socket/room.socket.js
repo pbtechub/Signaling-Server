@@ -63,11 +63,9 @@
 // };
 
 const { addUser, removeUser, getUsers } = require("../services/room.service");
-
+const timers = {};
 module.exports = (io, socket) => {
   let joinedRoom = null;
-
-  // JOIN ROOM
 
   socket.on("join-room", (data) => {
     const { roomId, role } = data;
@@ -100,15 +98,19 @@ module.exports = (io, socket) => {
 
     socket.emit("room-users", getUsers(roomId));
 
-    socket.to(roomId).emit("user-joined", user);
-  });
+    // IMPORTANT PART
 
-  // LEAVE BUTTON
+    if (result.refreshed) {
+      console.log("User refreshed:", role);
+
+      socket.to(roomId).emit("user-refreshed", user);
+    } else {
+      socket.to(roomId).emit("user-joined", user);
+    }
+  });
 
   socket.on("leave-room", (data) => {
     const { roomId } = data;
-
-    console.log("User leaving:", socket.id);
 
     removeUser(roomId, socket.id);
 
@@ -119,17 +121,29 @@ module.exports = (io, socket) => {
     socket.leave(roomId);
   });
 
-  // REFRESH / TAB CLOSE / NETWORK LOSS
+  // socket.on("disconnect", () => {
+  //   console.log("Disconnected:", socket.id);
+
+  //   if (joinedRoom) {
+  //     removeUser(joinedRoom, socket.id);
+
+  //     socket.to(joinedRoom).emit("user-left", {
+  //       id: socket.id,
+  //     });
+  //   }
+  // });
 
   socket.on("disconnect", () => {
-    console.log("Disconnected:", socket.id);
+    console.log("Temporary disconnect:", socket.id);
 
-    if (joinedRoom) {
-      removeUser(joinedRoom, socket.id);
+    timers[socket.id] = setTimeout(() => {
+      if (joinedRoom) {
+        removeUser(joinedRoom, socket.id);
 
-      socket.to(joinedRoom).emit("user-left", {
-        id: socket.id,
-      });
-    }
+        socket.to(joinedRoom).emit("user-left", {
+          id: socket.id,
+        });
+      }
+    }, 10000);
   });
 };

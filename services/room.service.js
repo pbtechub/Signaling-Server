@@ -5,22 +5,29 @@
 //     rooms[roomId] = [];
 //   }
 
-//   const alreadyExists = rooms[roomId].find((u) => u.role === user.role);
+//   const alreadyJoined = rooms[roomId].find((item) => item.role === user.role);
 
-//   if (alreadyExists) {
-//     alreadyExists.id = user.id;
-//     alreadyExists.joinedAt = Date.now();
-
-//     return;
+//   if (alreadyJoined) {
+//     return {
+//       success: false,
+//       message: `${user.role} already joined`,
+//     };
 //   }
 
 //   rooms[roomId].push(user);
+
+//   return {
+//     success: true,
+//     users: rooms[roomId],
+//   };
 // };
 
 // const removeUser = (roomId, socketId) => {
-//   if (!rooms[roomId]) return;
+//   if (!rooms[roomId]) {
+//     return;
+//   }
 
-//   rooms[roomId] = rooms[roomId].filter((u) => u.id !== socketId);
+//   rooms[roomId] = rooms[roomId].filter((user) => user.id !== socketId);
 
 //   if (rooms[roomId].length === 0) {
 //     delete rooms[roomId];
@@ -35,100 +42,90 @@
 //   addUser,
 //   removeUser,
 //   getUsers,
+//   removeUser,
 // };
 
-const { rooms } = require("../store/room.store");
-
+const { createRoom, getRoom, removeRoom } = require("../store/room.store");
 
 const addUser = (roomId, user) => {
+  const room = createRoom(roomId);
 
+  if (user.role === "tutor") {
+    // allow tutor refresh
+    if (room.tutor) {
+      room.tutor = user.id;
 
-  if(!rooms[roomId]){
+      return {
+        success: true,
+        refreshed: true,
+        room,
+      };
+    }
 
-    rooms[roomId] = [];
-
+    room.tutor = user.id;
   }
 
+  if (user.role === "learner") {
+    if (room.learner) {
+      return {
+        success: false,
+        message: "Learner already joined",
+      };
+    }
 
-
-  const alreadyJoined =
-    rooms[roomId].find(
-      item => item.role === user.role
-    );
-
-
-
-  if(alreadyJoined){
-
-    return {
-      success:false,
-      message:`${user.role} already joined`
-    };
-
+    room.learner = user.id;
   }
-
-
-
-  rooms[roomId].push(user);
-
-
 
   return {
-    success:true,
-    users:rooms[roomId]
+    success: true,
+    room,
   };
-
 };
 
+const removeUser = (roomId, socketId) => {
+  const room = getRoom(roomId);
 
+  if (!room) return;
 
-
-const removeUser = (
-  roomId,
-  socketId
-)=>{
-
-
-  if(!rooms[roomId]){
-    return;
+  if (room.tutor === socketId) {
+    room.tutor = null;
   }
 
-
-
-  rooms[roomId] =
-    rooms[roomId].filter(
-      user => user.id !== socketId
-    );
-
-
-
-  if(
-    rooms[roomId].length === 0
-  ){
-
-    delete rooms[roomId];
-
+  if (room.learner === socketId) {
+    room.learner = null;
   }
 
+  if (!room.tutor && !room.learner) {
+    removeRoom(roomId);
+  }
 };
 
+const getUsers = (roomId) => {
+  const room = getRoom(roomId);
 
+  if (!room) return [];
 
+  const users = [];
 
-const getUsers = (roomId)=>{
+  if (room.tutor) {
+    users.push({
+      id: room.tutor,
+      role: "tutor",
+    });
+  }
 
+  if (room.learner) {
+    users.push({
+      id: room.learner,
+      role: "learner",
+    });
+  }
 
-  return rooms[roomId] || [];
-
-
+  return users;
 };
 
-
-
-
-module.exports={
+module.exports = {
   addUser,
   removeUser,
   getUsers,
-  removeUser
 };
