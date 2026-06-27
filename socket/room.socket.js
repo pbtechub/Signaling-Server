@@ -65,38 +65,50 @@
 const { addUser, removeUser, getUsers } = require("../services/room.service");
 
 module.exports = (io, socket) => {
+  let joinedRoom = null;
+
   // JOIN ROOM
 
   socket.on("join-room", (data) => {
     const { roomId, role } = data;
 
-    console.log(`User ${socket.id} joined room ${roomId} as ${role}`);
-
     const user = {
       id: socket.id,
-
       role,
-
       joinedAt: Date.now(),
     };
 
+    joinedRoom = roomId;
+
     socket.join(roomId);
 
-    addUser(roomId, user);
+    const result = addUser(roomId, user);
 
-    // send current participants
+    if (!result.success) {
+      console.log("Join rejected:", result.message);
+
+      socket.emit("room-full", {
+        message: result.message,
+      });
+
+      socket.leave(roomId);
+
+      return;
+    }
+
+    console.log(`User ${socket.id} joined ${roomId} as ${role}`);
+
     socket.emit("room-users", getUsers(roomId));
 
-    // notify existing users
     socket.to(roomId).emit("user-joined", user);
   });
 
-  // LEAVE ROOM
+  // LEAVE BUTTON
 
   socket.on("leave-room", (data) => {
     const { roomId } = data;
 
-    console.log("User leaving:", socket.id, roomId);
+    console.log("User leaving:", socket.id);
 
     removeUser(roomId, socket.id);
 
@@ -107,21 +119,17 @@ module.exports = (io, socket) => {
     socket.leave(roomId);
   });
 
-  // DISCONNECT (browser close / refresh)
-
-  // socket.on("disconnect", () => {
-  //   const rooms = require("../store/room.store").rooms;
-
-  //   for (const roomId in rooms) {
-  //     removeUser(roomId, socket.id);
-
-  //     socket.to(roomId).emit("user-left", {
-  //       id: socket.id,
-  //     });
-  //   }
-  // });
+  // REFRESH / TAB CLOSE / NETWORK LOSS
 
   socket.on("disconnect", () => {
-    console.log("Temporary disconnect:", socket.id);
+    console.log("Disconnected:", socket.id);
+
+    if (joinedRoom) {
+      removeUser(joinedRoom, socket.id);
+
+      socket.to(joinedRoom).emit("user-left", {
+        id: socket.id,
+      });
+    }
   });
 };
