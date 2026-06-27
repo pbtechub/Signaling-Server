@@ -1,68 +1,5 @@
-// const { addUser, removeUser, getUsers } = require("../services/room.service");
-
-// module.exports = (io, socket) => {
-//   socket.on("join-room", (data) => {
-//     const { roomId, role } = data;
-
-//     console.log(`User ${socket} joined room ${roomId} as ${role}`);
-
-//     const user = {
-//       id: socket.id,
-
-//       role,
-
-//       joinedAt: Date.now(),
-//     };
-
-//     socket.join(roomId);
-
-//     addUser(roomId, user);
-
-//     // send current users
-
-//     socket.emit("room-users", getUsers(roomId));
-
-//     // notify others
-
-//     socket.to(roomId).emit("user-joined", user);
-//   });
-
-//   // socket.on("leave-room", (roomId) => {
-//   //   removeUser(roomId, socket.id);
-
-//   //   socket.to(roomId).emit("user-left", {
-//   //     id: socket.id,
-//   //   });
-
-//   //   socket.leave(roomId);
-//   // });
-
-//   socket.on("leave-room", (data) => {
-//     const roomId = data.roomId;
-
-//     console.log("User leaving:", socket.id, roomId);
-
-//     removeUser(roomId, socket.id);
-
-//     socket.to(roomId).emit("user-left", {
-//       id: socket.id,
-//     });
-
-//     socket.leave(roomId);
-//   });
-
-//   socket.on("disconnect", () => {
-//     for (const roomId in require("../store/room.store").rooms) {
-//       removeUser(roomId, socket.id);
-
-//       socket.to(roomId).emit("user-left", {
-//         id: socket.id,
-//       });
-//     }
-//   });
-// };
-
 const { addUser, removeUser, getUsers } = require("../services/room.service");
+const { getRoom } = require("../store/room.store");
 const timers = {};
 module.exports = (io, socket) => {
   let joinedRoom = null;
@@ -121,19 +58,44 @@ module.exports = (io, socket) => {
     socket.leave(roomId);
   });
 
+  // socket.on("disconnect", () => {
+  //   console.log("Temporary disconnect:", socket.id);
 
+  //   timers[socket.id] = setTimeout(() => {
+  //     if (joinedRoom) {
+  //       removeUser(joinedRoom, socket.id);
+
+  //       socket.to(joinedRoom).emit("user-disconnected", {
+  //         id: socket.id,
+  //       });
+  //     }
+  //   }, 10000);
+  // });
 
   socket.on("disconnect", () => {
     console.log("Temporary disconnect:", socket.id);
 
     timers[socket.id] = setTimeout(() => {
-      if (joinedRoom) {
-        removeUser(joinedRoom, socket.id);
+      const room = getRoom(joinedRoom);
 
-        socket.to(joinedRoom).emit("user-disconnected", {
-          id: socket.id,
-        });
+      if (!room) {
+        return;
       }
+
+      const isStillActive =
+        room.tutor === socket.id || room.learner === socket.id;
+
+      if (!isStillActive) {
+        console.log("Old socket ignored:", socket.id);
+
+        return;
+      }
+
+      removeUser(joinedRoom, socket.id);
+
+      socket.to(joinedRoom).emit("user-disconnected", {
+        id: socket.id,
+      });
     }, 10000);
   });
 };
