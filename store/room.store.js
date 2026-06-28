@@ -103,7 +103,7 @@ const createRoom = (roomId) => {
 
       status: "waiting",
 
-      duration: 1, // minutes
+      duration: 0.5, // minutes
 
       startedAt: null,
 
