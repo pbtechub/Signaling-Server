@@ -1,5 +1,8 @@
 const { addUser, removeUser, getUsers } = require("../services/room.service");
 const { getRoom } = require("../store/room.store");
+
+const { startSessionExpiryWatcher } = require("../services/session.service");
+
 const timers = {};
 module.exports = (io, socket) => {
   let joinedRoom = null;
@@ -101,6 +104,8 @@ module.exports = (io, socket) => {
     room.startedAt = startedAt;
     room.endsAt = endsAt;
     room.duration = duration;
+
+    startSessionExpiryWatcher(io, roomId);
 
     console.log("✅ Session started", {
       roomId,
