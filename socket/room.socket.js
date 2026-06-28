@@ -35,6 +35,18 @@ module.exports = (io, socket) => {
 
     socket.emit("room-users", getUsers(roomId));
 
+    const room = getRoom(roomId);
+
+    if (room && room.startedAt && room.endsAt && room.status === "active") {
+      console.log("Sending existing session to:", role);
+
+      socket.emit("session-started", {
+        startedAt: room.startedAt,
+        endsAt: room.endsAt,
+        duration: room.duration,
+      });
+    }
+
     // IMPORTANT PART
 
     if (result.refreshed) {
@@ -46,24 +58,26 @@ module.exports = (io, socket) => {
     }
   });
 
-  // START SESSION (Tutor only)
-
   socket.on("start-session", ({ roomId }) => {
-    const { getRoom } = require("../store/room.store");
+    console.log("🔥 START SESSION RECEIVED");
+    console.log("socket:", socket.id);
+    console.log("roomId:", roomId);
 
     const room = getRoom(roomId);
 
     if (!room) {
+      console.log("Room not found");
       socket.emit("session-error", {
         message: "Room not found",
       });
-
       return;
     }
 
-    // only tutor can start
+    console.log("Current room:", room);
 
     if (room.tutor !== socket.id) {
+      console.log("Not tutor", "expected:", room.tutor, "received:", socket.id);
+
       socket.emit("session-error", {
         message: "Only tutor can start session",
       });
@@ -71,29 +85,35 @@ module.exports = (io, socket) => {
       return;
     }
 
-    // prevent duplicate start
-
     if (room.status === "active") {
+      console.log("Session already active");
       return;
     }
 
     room.status = "active";
-    const duration = room.duration ?? 0;
+
+    const duration = room.duration ?? 90;
 
     const startedAt = Date.now();
+
     const endsAt = startedAt + duration * 60 * 1000;
 
     room.startedAt = startedAt;
     room.endsAt = endsAt;
     room.duration = duration;
 
-    const payload = {
+    console.log("✅ Session started", {
+      roomId,
       startedAt,
       endsAt,
       duration,
-    };
+    });
 
-    io.to(roomId).emit("session-started", payload);
+    io.to(roomId).emit("session-started", {
+      startedAt,
+      endsAt,
+      duration,
+    });
   });
 
   socket.on("leave-room", (data) => {
