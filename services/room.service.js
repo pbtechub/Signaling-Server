@@ -1,34 +1,40 @@
-const { createRoom, getRoom, removeRoom } = require("../store/room.store");
+const { createRoom, getRoom, addUser: storeAddUser, removeRoom } = require("../store/room.store");
 
 const addUser = (roomId, user) => {
-  const room = createRoom(roomId);
+  const room = storeAddUser(roomId, user, user.socketId);
 
-  let refreshed = false;
-
-  if (user.role === "tutor") {
-    if (room.tutor) {
-      // same role reconnecting after refresh
-      refreshed = true;
-
-      room.tutor = user.id;
-    } else {
-      room.tutor = user.id;
-    }
+  if (!room) {
+    return {
+      success: false,
+      message: "Failed to add user to room",
+    };
   }
 
-  if (user.role === "learner") {
-    if (room.learner) {
-      refreshed = true;
+  // Check room capacity (max 2 users: 1 tutor, 1 learner)
+  const tutorCount = room.users?.tutor ? 1 : 0;
+  const learnerCount = room.users?.learner ? 1 : 0;
+  const totalUsers = tutorCount + learnerCount;
 
-      room.learner = user.id;
-    } else {
-      room.learner = user.id;
-    }
+  // If this is a new user and room is full, reject
+  if (totalUsers >= 2 && !room.users[user.role]?.id) {
+    return {
+      success: false,
+      message: "Room is full. Maximum 2 participants allowed (1 tutor, 1 learner)",
+    };
+  }
+
+  // If same role already exists but different user, reject
+  const existingUser = room.users[user.role];
+  if (existingUser && existingUser.id !== user.id) {
+    return {
+      success: false,
+      message: `A ${user.role} is already in this room`,
+    };
   }
 
   return {
     success: true,
-    refreshed,
+    refreshed: existingUser?.id === user.id, // true if same user reconnecting
     room,
   };
 };
@@ -38,15 +44,17 @@ const removeUser = (roomId, socketId) => {
 
   if (!room) return;
 
-  if (room.tutor === socketId) {
-    room.tutor = null;
+  // Find and clear the user from room
+  if (room.users?.tutor?.socketId === socketId) {
+    room.users.tutor = null;
   }
 
-  if (room.learner === socketId) {
-    room.learner = null;
+  if (room.users?.learner?.socketId === socketId) {
+    room.users.learner = null;
   }
 
-  if (!room.tutor && !room.learner) {
+  // Remove room if empty
+  if (!room.users?.tutor && !room.users?.learner) {
     removeRoom(roomId);
   }
 };
@@ -58,17 +66,23 @@ const getUsers = (roomId) => {
 
   const users = [];
 
-  if (room.tutor) {
+  if (room.users?.tutor) {
     users.push({
-      id: room.tutor,
+      id: room.users.tutor.id,
+      socketId: room.users.tutor.socketId,
       role: "tutor",
+      name: room.users.tutor.name || "Tutor",
+      status: room.users.tutor.connected ? "connected" : "disconnected",
     });
   }
 
-  if (room.learner) {
+  if (room.users?.learner) {
     users.push({
-      id: room.learner,
+      id: room.users.learner.id,
+      socketId: room.users.learner.socketId,
       role: "learner",
+      name: room.users.learner.name || "Learner",
+      status: room.users.learner.connected ? "connected" : "disconnected",
     });
   }
 

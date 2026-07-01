@@ -1,337 +1,286 @@
-// const { addUser, removeUser, getUsers } = require("../services/room.service");
-// const { getRoom } = require("../store/room.store");
-
-// const { startSessionExpiryWatcher } = require("../services/session.service");
-
-// const timers = {};
-// module.exports = (io, socket) => {
-//   let joinedRoom = null;
-
-//   socket.on("join-room", (data) => {
-//     const { roomId, role } = data;
-
-//     const user = {
-//       id: socket.id,
-//       role,
-//       joinedAt: Date.now(),
-//     };
-
-//     joinedRoom = roomId;
-
-//     socket.join(roomId);
-
-//     const result = addUser(roomId, user);
-
-//     if (!result.success) {
-//       console.log("Join rejected:", result.message);
-
-//       socket.emit("room-full", {
-//         message: result.message,
-//       });
-
-//       socket.leave(roomId);
-
-//       return;
-//     }
-
-//     console.log(`User ${socket.id} joined ${roomId} as ${role}`);
-
-//     socket.emit("room-users", getUsers(roomId));
-
-//     const room = getRoom(roomId);
-
-//     if (room && room.startedAt && room.endsAt && room.status === "active") {
-//       console.log("Sending existing session to:", role);
-
-//       socket.emit("session-started", {
-//         startedAt: room.startedAt,
-//         endsAt: room.endsAt,
-//         duration: room.duration,
-//       });
-//     }
-
-//     // IMPORTANT PART
-
-//     if (result.refreshed) {
-//       console.log("User refreshed:", role);
-
-//       socket.to(roomId).emit("user-refreshed", user);
-//     } else {
-//       socket.to(roomId).emit("user-joined", user);
-//     }
-//   });
-
-//   socket.on("start-session", ({ roomId }) => {
-//     console.log("🔥 START SESSION RECEIVED");
-//     console.log("socket:", socket.id);
-//     console.log("roomId:", roomId);
-
-//     const room = getRoom(roomId);
-
-//     if (!room) {
-//       console.log("Room not found");
-//       socket.emit("session-error", {
-//         message: "Room not found",
-//       });
-//       return;
-//     }
-
-//     console.log("Current room:", room);
-
-//     if (room.tutor !== socket.id) {
-//       console.log("Not tutor", "expected:", room.tutor, "received:", socket.id);
-
-//       socket.emit("session-error", {
-//         message: "Only tutor can start session",
-//       });
-
-//       return;
-//     }
-
-//     if (room.status === "active") {
-//       console.log("Session already active");
-//       return;
-//     }
-
-//     room.status = "active";
-
-//     const duration = room.duration ?? 90;
-
-//     const startedAt = Date.now();
-
-//     const endsAt = startedAt + duration * 60 * 1000;
-
-//     room.startedAt = startedAt;
-//     room.endsAt = endsAt;
-//     room.duration = duration;
-
-//     startSessionExpiryWatcher(io, roomId);
-
-//     console.log("✅ Session started", {
-//       roomId,
-//       startedAt,
-//       endsAt,
-//       duration,
-//     });
-
-//     io.to(roomId).emit("session-started", {
-//       startedAt,
-//       endsAt,
-//       duration,
-//     });
-//   });
-
-//   socket.on("leave-room", (data) => {
-//     const { roomId } = data;
-
-//     removeUser(roomId, socket.id);
-
-//     socket.to(roomId).emit("user-left", {
-//       id: socket.id,
-//     });
-
-//     socket.leave(roomId);
-//   });
-
-//   socket.on("disconnect", () => {
-//     console.log("Temporary disconnect:", socket.id);
-
-//     timers[socket.id] = setTimeout(() => {
-//       const room = getRoom(joinedRoom);
-
-//       if (!room) {
-//         return;
-//       }
-
-//       const isStillActive =
-//         room.tutor === socket.id || room.learner === socket.id;
-
-//       if (!isStillActive) {
-//         console.log("Old socket ignored:", socket.id);
-
-//         return;
-//       }
-
-//       removeUser(joinedRoom, socket.id);
-
-//       socket.to(joinedRoom).emit("user-disconnected", {
-//         id: socket.id,
-//       });
-//     }, 10000);
-//   });
-// };
-
-// socket/room.socket.js
-
 const { addUser, removeUser, getUsers } = require("../services/room.service");
-
-const {
-  getRoom,
-  reconnectUser,
-  disconnectUser,
-} = require("../store/room.store");
-
+const { getRoom, reconnectUser, disconnectUser } = require("../store/room.store");
 const { startSessionExpiryWatcher } = require("../services/session.service");
+
+// Logger utility
+const logger = {
+  info: (msg, data) => console.log(`[ROOM] ${msg}`, data || ""),
+  error: (msg, error) => console.error(`[ROOM ERROR] ${msg}`, error || ""),
+  warn: (msg, data) => console.warn(`[ROOM WARN] ${msg}`, data || ""),
+};
 
 module.exports = (io, socket) => {
   let joinedRoom = null;
+  let joinedUserId = null;
 
-  /*
-    JOIN ROOM
-  */
-
+  /**
+   * JOIN ROOM EVENT
+   * User joining room - validates and sets up peer connection
+   */
   socket.on("join-room", (data) => {
-    const { roomId, role, userId, refreshed } = data;
+    try {
+      const { roomId, role, userId, reconnect } = data;
 
-    const user = {
-      // permanent user identity
-      id: userId,
+      // Validation
+      if (!roomId || !role || !userId) {
+        logger.error("Invalid join-room data", data);
+        socket.emit("room-error", {
+          message: "Invalid room join parameters",
+        });
+        return;
+      }
 
-      // current socket
-      socketId: socket.id,
+      if (!["tutor", "learner"].includes(role)) {
+        logger.error("Invalid role:", role);
+        socket.emit("room-error", {
+          message: "Invalid role. Must be 'tutor' or 'learner'",
+        });
+        return;
+      }
 
-      role,
+      joinedRoom = roomId;
+      joinedUserId = userId;
 
-      joinedAt: Date.now(),
-    };
+      const user = {
+        id: userId,
+        socketId: socket.id,
+        role,
+        joinedAt: Date.now(),
+      };
 
-    joinedRoom = roomId;
+      // Store user data on socket for use in other handlers
+      socket.user = user;
 
-    socket.join(roomId);
+      socket.join(roomId);
+      logger.info(`👤 User joining room`, {
+        userId,
+        roomId,
+        role,
+        reconnect,
+      });
 
-    /*
-        Refresh reconnect
-      */
+      /**
+       * REFRESH RECONNECT
+       * User refreshed page but same session
+       */
+      if (reconnect) {
+        const room = reconnectUser(roomId, user, socket.id);
 
-    if (refreshed) {
-      const room = reconnectUser(roomId, user, socket.id);
+        if (!room) {
+          logger.error("Failed to reconnect user", { userId, roomId });
+          socket.emit("room-error", {
+            message: "Failed to reconnect",
+          });
+          socket.leave(roomId);
+          return;
+        }
 
-      console.log("User reconnected", user.id);
+        logger.info("✅ User reconnected", { userId });
 
-      socket.emit("room-users", getUsers(roomId));
+        socket.emit("room-users", getUsers(roomId));
+        socket.to(roomId).emit("user-reconnected", user);
 
-      socket.to(roomId).emit("user-reconnected", user);
+        return;
+      }
 
-      return;
+      /**
+       * NEW USER JOIN
+       * First time joining room
+       */
+      const result = addUser(roomId, user);
+
+      if (!result.success) {
+        logger.warn("Join rejected", {
+          userId,
+          message: result.message,
+        });
+
+        socket.emit("room-full", {
+          message: result.message,
+        });
+
+        socket.leave(roomId);
+        return;
+      }
+
+      logger.info("✅ User added to room", {
+        userId,
+        roomId,
+        role,
+      });
+
+      // Send current room users to joining user
+      const roomUsers = getUsers(roomId);
+      socket.emit("room-users", roomUsers);
+
+      // Check if session already active
+      const room = getRoom(roomId);
+      if (room && room.status === "active" && room.endsAt) {
+        logger.info("📢 Active session exists, sending to new user", {
+          endsAt: new Date(room.endsAt).toISOString(),
+        });
+
+        socket.emit("session-started", {
+          startedAt: room.startedAt,
+          endsAt: room.endsAt,
+          duration: room.duration,
+        });
+      }
+
+      // Notify other users about new join
+      socket.to(roomId).emit("user-joined", user);
+
+      logger.info("✅ Join-room completed successfully", {
+        userId,
+        participantCount: roomUsers.length + 1,
+      });
+    } catch (error) {
+      logger.error("join-room exception", error);
+      socket.emit("room-error", {
+        message: "Failed to join room",
+        error: error.message,
+      });
     }
+  });
 
-    const result = addUser(roomId, user, socket.id);
+  /**
+   * START SESSION EVENT
+   * Tutor starts the scheduled session
+   */
+  socket.on("start-session", ({ roomId }) => {
+    try {
+      if (!roomId || !joinedRoom || roomId !== joinedRoom) {
+        logger.error("Invalid start-session roomId", { provided: roomId, joined: joinedRoom });
+        socket.emit("session-error", {
+          message: "Invalid room ID",
+        });
+        return;
+      }
 
-    if (!result.success) {
-      console.log("Join rejected:", result.message);
+      const room = getRoom(roomId);
 
-      socket.emit("room-full", {
-        message: result.message,
+      if (!room) {
+        logger.error("Room not found", { roomId });
+        socket.emit("session-error", {
+          message: "Room not found",
+        });
+        return;
+      }
+
+      // Only tutor can start session
+      if (room.users?.tutor?.socketId !== socket.id) {
+        logger.warn("Non-tutor attempted to start session", {
+          userId: joinedUserId,
+          roomId,
+        });
+
+        socket.emit("session-error", {
+          message: "Only tutor can start session",
+        });
+        return;
+      }
+
+      // Prevent restarting active session
+      if (room.status === "active") {
+        logger.warn("Session already active", { roomId });
+        return;
+      }
+
+      // Calculate session duration
+      const duration = room.duration || 60; // default 60 minutes
+      const startedAt = Date.now();
+      const endsAt = startedAt + duration * 60 * 1000;
+
+      // Update room state
+      room.status = "active";
+      room.startedAt = startedAt;
+      room.endsAt = endsAt;
+
+      // Start expiry watcher on server
+      startSessionExpiryWatcher(io, roomId);
+
+      logger.info("🎬 Session started", {
+        roomId,
+        duration,
+        startTime: new Date(startedAt).toISOString(),
+        endTime: new Date(endsAt).toISOString(),
+      });
+
+      // Broadcast to all participants
+      io.to(roomId).emit("session-started", {
+        startedAt,
+        endsAt,
+        duration,
+      });
+    } catch (error) {
+      logger.error("start-session exception", error);
+      socket.emit("session-error", {
+        message: "Failed to start session",
+        error: error.message,
+      });
+    }
+  });
+
+  /**
+   * LEAVE ROOM EVENT
+   * User explicitly leaves the room
+   */
+  socket.on("leave-room", ({ roomId }) => {
+    try {
+      if (!roomId || !joinedRoom || roomId !== joinedRoom) {
+        logger.error("Invalid leave-room roomId", { provided: roomId, joined: joinedRoom });
+        return;
+      }
+
+      logger.info("👋 User leaving room", { userId: joinedUserId, roomId });
+
+      removeUser(roomId, socket.id);
+
+      socket.to(roomId).emit("user-left", {
+        userId: joinedUserId,
       });
 
       socket.leave(roomId);
+      joinedRoom = null;
+      joinedUserId = null;
 
-      return;
+      logger.info("✅ User left successfully", { roomId });
+    } catch (error) {
+      logger.error("leave-room exception", error);
     }
-
-    console.log(`User ${user.id} joined ${roomId} as ${role}`);
-
-    socket.emit("room-users", getUsers(roomId));
-
-    const room = getRoom(roomId);
-
-    /*
-        existing active session
-      */
-
-    if (room && room.startedAt && room.endsAt && room.status === "active") {
-      socket.emit("session-started", {
-        startedAt: room.startedAt,
-
-        endsAt: room.endsAt,
-
-        duration: room.duration,
-      });
-    }
-
-    socket.to(roomId).emit("user-joined", user);
   });
 
-  /*
-     START SESSION
-  */
-
-  socket.on("start-session", ({ roomId }) => {
-    const room = getRoom(roomId);
-
-    if (!room) {
-      socket.emit("session-error", {
-        message: "Room not found",
-      });
-
-      return;
-    }
-
-    // only tutor
-
-    if (room.users?.tutor?.socketId !== socket.id) {
-      socket.emit("session-error", {
-        message: "Only tutor can start session",
-      });
-
-      return;
-    }
-
-    if (room.status === "active") {
-      return;
-    }
-
-    room.status = "active";
-
-    const duration = room.duration || 90;
-
-    const startedAt = Date.now();
-
-    const endsAt = startedAt + duration * 60 * 1000;
-
-    room.startedAt = startedAt;
-
-    room.endsAt = endsAt;
-
-    startSessionExpiryWatcher(io, roomId);
-
-    io.to(roomId).emit("session-started", {
-      startedAt,
-      endsAt,
-      duration,
-    });
-  });
-
-  /*
-      LEAVE BUTTON
-  */
-
-  socket.on("leave-room", ({ roomId }) => {
-    removeUser(roomId, socket.id);
-
-    socket.to(roomId).emit("user-left", {
-      id: socket.id,
-    });
-
-    socket.leave(roomId);
-  });
-
-  /*
-      DISCONNECT
-      refresh / browser close
-  */
-
+  /**
+   * DISCONNECT EVENT
+   * Socket disconnected (network issue, browser close, etc.)
+   */
   socket.on("disconnect", () => {
-    console.log("socket disconnected", socket.id);
+    try {
+      logger.info("🔌 Socket disconnected", { socketId: socket.id, joinedRoom });
 
-    if (!joinedRoom) {
-      return;
+      if (!joinedRoom) {
+        return;
+      }
+
+      // Mark user as temporarily disconnected (grace period for reconnect)
+      disconnectUser(joinedRoom, socket.id);
+
+      // Notify others
+      socket.to(joinedRoom).emit("user-disconnected", {
+        userId: joinedUserId,
+      });
+
+      logger.info("✅ Disconnect handled", { joinedRoom, userId: joinedUserId });
+    } catch (error) {
+      logger.error("disconnect exception", error);
     }
+  });
 
-    disconnectUser(joinedRoom, socket.id);
-
-    socket.to(joinedRoom).emit("user-disconnected", {
-      id: socket.id,
-    });
+  /**
+   * ERROR HANDLER
+   * Socket error occurred
+   */
+  socket.on("error", (error) => {
+    logger.error("Socket error", error);
   });
 };
