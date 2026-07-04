@@ -407,6 +407,8 @@ const createRoom = (roomId, sessionData = {}) => {
       session: {
         sessionId: sessionData.sessionId || null,
 
+        roomId: sessionData.roomId || roomId,
+
         meetingId: sessionData.meetingId || null,
 
         startTime: sessionData.startTime || null,
@@ -423,6 +425,16 @@ const createRoom = (roomId, sessionData = {}) => {
           recording: false,
           handRaise: true,
         },
+
+        tutorToken: sessionData.tutorToken || null,
+
+        learnerToken: sessionData.learnerToken || null,
+
+        metadata: sessionData.metadata || null,
+
+        role: sessionData.role || null,
+
+        timezone: sessionData.timezone || null,
       },
 
       status: "waiting",

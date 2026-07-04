@@ -169,6 +169,77 @@ const { getRoom, disconnectUser } = require("../store/room.store");
 
 const { startSessionExpiryWatcher } = require("../services/session.service");
 
+const normalizeSessionPayload = (data = {}) => {
+  const payload = data?.data || data || {};
+  const session = payload?.data || payload || {};
+  const role = data?.role || payload?.role || session?.role || null;
+  const participant =
+    role === "tutor"
+      ? session?.tutor
+      : role === "learner"
+        ? session?.learner
+        : null;
+
+  const userId =
+    data?.userId ||
+    data?.id ||
+    data?.user?.id ||
+    data?.user?.userId ||
+    participant?._id ||
+    session?.userId ||
+    null;
+
+  const name =
+    data?.name ||
+    data?.user?.name ||
+    [participant?.first_name, participant?.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim() ||
+    session?.name ||
+    null;
+
+  const email =
+    data?.email ||
+    data?.user?.email ||
+    participant?.email ||
+    session?.email ||
+    null;
+
+  const roomId = data?.roomId || payload?.roomId || session?.roomId || null;
+  const sessionId =
+    data?.sessionId || payload?.sessionId || session?.sessionId || null;
+
+  return {
+    roomId,
+    sessionId,
+    userId,
+    role,
+    name,
+    email,
+    sessionData: {
+      ...session,
+      roomId,
+      sessionId,
+      role,
+      status: payload?.status || session?.status || "scheduled",
+      startTime: payload?.startTime || session?.startTime || null,
+      endTime: payload?.endTime || session?.endTime || null,
+      duration: payload?.duration || session?.duration || 60,
+      tutorToken: payload?.tutorToken || session?.tutorToken || null,
+      learnerToken: payload?.learnerToken || session?.learnerToken || null,
+      metadata: session?.metadata || null,
+      timezone: session?.timezone || null,
+      permissions: session?.permissions || {
+        chat: true,
+        screenShare: false,
+        recording: false,
+        handRaise: true,
+      },
+    },
+  };
+};
+
 module.exports = (io, socket) => {
   let joinedRoom = null;
   let joinedUserId = null;
@@ -180,7 +251,9 @@ module.exports = (io, socket) => {
    */
   socket.on("join-room", (data) => {
     try {
-      const { roomId, sessionId, userId, role, name, email } = data;
+      const normalized = normalizeSessionPayload(data);
+      const { roomId, sessionId, userId, role, name, email, sessionData } =
+        normalized;
 
       if (!roomId || !sessionId || !userId || !role) {
         socket.emit("room-error", {
@@ -204,13 +277,12 @@ module.exports = (io, socket) => {
         ...user,
         roomId,
         sessionId,
+        sessionData,
       };
 
       socket.join(roomId);
 
-      const result = addUser(roomId, user, socket.id, {
-        sessionId,
-      });
+      const result = addUser(roomId, user, socket.id, sessionData);
 
       if (!result.success) {
         socket.leave(roomId);

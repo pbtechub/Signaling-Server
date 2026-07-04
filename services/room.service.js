@@ -140,13 +140,20 @@ const addUser = (roomId, user, socketId, session = {}) => {
    * Session information comes from Main Backend.
    */
   const room = createRoom(roomId, {
+    ...session,
     sessionId: session.sessionId,
+    roomId: session.roomId || roomId,
     meetingId: session.meetingId,
     startTime: session.startTime,
     endTime: session.endTime,
     duration: session.duration,
     permissions: session.permissions,
     status: session.status,
+    tutorToken: session.tutorToken,
+    learnerToken: session.learnerToken,
+    metadata: session.metadata,
+    role: session.role,
+    timezone: session.timezone,
   });
 
   if (!room) {
