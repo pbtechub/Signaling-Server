@@ -171,7 +171,7 @@ const { startSessionExpiryWatcher } = require("../services/session.service");
 
 const normalizeSessionPayload = (data = {}) => {
   const payload = data?.data || data || {};
-  const session = payload?.data || payload || {};
+  const session = payload?.sessionData || payload?.data || payload || {};
   const role = data?.role || payload?.role || session?.role || null;
   const participant =
     role === "tutor"
