@@ -1,125 +1,3 @@
-// const {
-//   createRoom,
-//   getRoom,
-//   addUser: storeAddUser,
-//   removeUser: storeRemoveUser,
-//   removeRoom,
-//   getRoomUsers,
-// } = require("../store/room.store");
-
-// /**
-//  * Add user into room
-//  *
-//  * user comes from verified JWT
-//  */
-// const addUser = (roomId, user, socketId) => {
-//   const room = createRoom(roomId);
-
-//   if (!room) {
-//     return {
-//       success: false,
-//       message: "Room creation failed",
-//     };
-//   }
-
-//   const existingUser = room.users[user.role];
-
-//   /**
-//    * Same user reconnecting
-//    */
-//   if (existingUser && existingUser.id === user.id) {
-//     storeAddUser(roomId, user, socketId);
-
-//     return {
-//       success: true,
-//       refreshed: true,
-//       room,
-//     };
-//   }
-
-//   /**
-//    * Different user same role
-//    */
-//   if (existingUser) {
-//     return {
-//       success: false,
-
-//       message: `A ${user.role} already exists in this room`,
-//     };
-//   }
-
-//   /**
-//    * Room capacity check
-//    */
-//   const hasTutor = !!room.users.tutor;
-
-//   const hasLearner = !!room.users.learner;
-
-//   if (hasTutor && hasLearner) {
-//     return {
-//       success: false,
-
-//       message: "Room already has maximum participants",
-//     };
-//   }
-
-//   storeAddUser(roomId, user, socketId);
-
-//   return {
-//     success: true,
-
-//     refreshed: false,
-
-//     room,
-//   };
-// };
-
-// /**
-//  * Explicit leave
-//  */
-// const removeUser = (roomId, userId) => {
-//   const room = getRoom(roomId);
-
-//   if (!room) return;
-
-//   storeRemoveUser(roomId, userId);
-
-//   const empty = !room.users.tutor && !room.users.learner;
-
-//   if (empty) {
-//     removeRoom(roomId);
-//   }
-// };
-
-// /**
-//  * Return participants
-//  */
-// const getUsers = (roomId) => {
-//   const users = getRoomUsers(roomId);
-
-//   return users.map((user) => ({
-//     id: user.id,
-
-//     socketId: user.socketId,
-
-//     role: user.role,
-
-//     name: user.name,
-
-//     email: user.email,
-
-//     status: user.connected ? "connected" : "disconnected",
-//   }));
-// };
-
-// module.exports = {
-//   addUser,
-
-//   removeUser,
-
-//   getUsers,
-// };
-
 const {
   createRoom,
   getRoom,
@@ -269,3 +147,87 @@ module.exports = {
   getUsers,
   getRoomDetails,
 };
+
+// const {
+//   createRoom,
+//   getRoom,
+//   addUser: storeAddUser,
+//   removeUser: storeRemoveUser,
+//   removeRoom,
+//   getRoomUsers,
+// } = require("../store/room.store");
+
+// const addUser = (roomId, user, socketId, session = {}) => {
+//   const room = createRoom(roomId, {
+//     ...session,
+//     sessionId: session.sessionId,
+//     roomId: session.roomId || roomId,
+//     status: session.status,
+//   });
+
+//   if (!room) {
+//     return { success: false, message: "Unable to create room." };
+//   }
+
+//   const existingUser = room.users[user.role];
+
+//   // If the EXACT same user instance is re-connecting on a new socket
+//   if (existingUser && existingUser.id === user.id) {
+//     // Check if the socketId actually changed before overwriting
+//     const isNewSocket = existingUser.socketId !== socketId;
+
+//     storeAddUser(roomId, user, socketId);
+
+//     return {
+//       success: true,
+//       refreshed: isNewSocket, // Flags if signaling channel needs resetting
+//       room,
+//     };
+//   }
+
+//   if (existingUser) {
+//     return {
+//       success: false,
+//       message: `${user.role} already exists in room.`,
+//     };
+//   }
+
+//   const participantCount = Object.values(room.users).filter(Boolean).length;
+//   if (participantCount >= 2) {
+//     return { success: false, message: "Room already full." };
+//   }
+
+//   storeAddUser(roomId, user, socketId);
+
+//   return {
+//     success: true,
+//     refreshed: false,
+//     room,
+//   };
+// };
+
+// const removeUser = (roomId, userId) => {
+//   const room = getRoom(roomId);
+//   if (!room) return;
+
+//   storeRemoveUser(roomId, userId);
+
+//   const participantCount = Object.values(room.users).filter(Boolean).length;
+//   if (participantCount === 0) {
+//     removeRoom(roomId);
+//   }
+// };
+
+// const getUsers = (roomId) => {
+//   const users = getRoomUsers(roomId);
+//   return users.map((user) => ({
+//     id: user.id,
+//     socketId: user.socketId,
+//     role: user.role,
+//     name: user.name,
+//     email: user.email,
+//     connected: user.connected,
+//   }));
+// };
+
+// module.exports = { addUser, removeUser, getUsers, getRoomDetails: getRoom };

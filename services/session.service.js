@@ -1,11 +1,21 @@
 const { getRoom } = require("../store/room.store");
 
+// Cache to keep track of active room intervals
+const activeWatchers = new Map();
+
 const startSessionExpiryWatcher = (io, roomId) => {
+  // Prevent duplicate intervals for the same room
+  if (activeWatchers.has(roomId)) {
+    clearInterval(activeWatchers.get(roomId));
+  }
+
   const interval = setInterval(() => {
     const room = getRoom(roomId);
 
     if (!room) {
+      console.log(`[WATCHER] Cleaning up orphaned watcher for room: ${roomId}`);
       clearInterval(interval);
+      activeWatchers.delete(roomId);
       return;
     }
 
@@ -19,8 +29,11 @@ const startSessionExpiryWatcher = (io, roomId) => {
       });
 
       clearInterval(interval);
+      activeWatchers.delete(roomId);
     }
   }, 1000);
+
+  activeWatchers.set(roomId, interval);
 };
 
 module.exports = {
