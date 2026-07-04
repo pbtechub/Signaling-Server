@@ -1,125 +1,123 @@
+
+
 const logger = {
   info: (msg, data) => console.log(`[WebRTC] ${msg}`, data || ""),
   error: (msg, error) => console.error(`[WebRTC ERROR] ${msg}`, error || ""),
 };
 
 module.exports = (io, socket) => {
+  const getRoomId = () => {
+    return socket.user?.roomId;
+  };
+
+  const validateRoom = (data) => {
+    const roomId = getRoomId();
+
+    if (!roomId) {
+      return false;
+    }
+
+    if (data.roomId && data.roomId !== roomId) {
+      return false;
+    }
+
+    return true;
+  };
+
   /**
-   * OFFER - user initiating connection
+   * OFFER
    */
   socket.on("offer", (data) => {
     try {
-      if (!data || !data.roomId || !data.offer) {
-        logger.error("Invalid offer data", data);
+      if (!data?.offer || !validateRoom(data)) {
         socket.emit("signaling-error", {
-          message: "Invalid offer data",
+          message: "Invalid offer",
         });
+
         return;
       }
 
-      logger.info("📤 Offer received and forwarded", {
-        from: data.from,
-        roomId: data.roomId,
+      const roomId = getRoomId();
+
+      socket.to(roomId).emit("offer", {
+        offer: data.offer,
+
+        from: socket.user.id,
       });
 
-      socket.to(data.roomId).emit("offer", {
-        offer: data.offer,
-        from: data.from,
+      logger.info("Offer forwarded", {
+        roomId,
       });
     } catch (error) {
-      logger.error("Offer relay failed", error);
-      socket.emit("signaling-error", {
-        message: "Failed to relay offer",
-      });
+      logger.error("Offer failed", error);
     }
   });
 
   /**
-   * ANSWER - user accepting connection
+   * ANSWER
    */
   socket.on("answer", (data) => {
     try {
-      if (!data || !data.roomId || !data.answer) {
-        logger.error("Invalid answer data", data);
-        socket.emit("signaling-error", {
-          message: "Invalid answer data",
-        });
-        return;
-      }
+      if (!data?.answer || !validateRoom(data)) return;
 
-      logger.info("📥 Answer received and forwarded", {
-        from: data.from,
-        roomId: data.roomId,
-      });
+      const roomId = getRoomId();
 
-      socket.to(data.roomId).emit("answer", {
+      socket.to(roomId).emit("answer", {
         answer: data.answer,
-        from: data.from,
+
+        from: socket.user.id,
       });
     } catch (error) {
-      logger.error("Answer relay failed", error);
-      socket.emit("signaling-error", {
-        message: "Failed to relay answer",
-      });
+      logger.error("Answer failed", error);
     }
   });
 
   /**
-   * ICE CANDIDATE - network discovery
+   * ICE
    */
   socket.on("ice-candidate", (data) => {
     try {
-      if (!data || !data.roomId || !data.candidate) {
-        logger.error("Invalid ICE candidate data", data);
-        return;
-      }
+      if (!data?.candidate || !validateRoom(data)) return;
 
-      socket.to(data.roomId).emit("ice-candidate", {
+      const roomId = getRoomId();
+
+      socket.to(roomId).emit("ice-candidate", {
         candidate: data.candidate,
-        from: data.from,
+
+        from: socket.user.id,
       });
     } catch (error) {
-      logger.error("ICE candidate relay failed", error);
+      logger.error("ICE failed", error);
     }
   });
 
   /**
-   * ICE RESTART OFFER
+   * ICE restart offer
    */
   socket.on("restart-offer", (data) => {
-    try {
-      if (!data || !data.roomId || !data.offer) {
-        logger.error("Invalid restart offer data", data);
-        return;
-      }
+    if (!data?.offer || !validateRoom(data)) return;
 
-      logger.info("🔄 ICE restart offer forwarded", { roomId: data.roomId });
-      socket.to(data.roomId).emit("restart-offer", {
-        offer: data.offer,
-        from: data.from,
-      });
-    } catch (error) {
-      logger.error("Restart offer relay failed", error);
-    }
+    const roomId = getRoomId();
+
+    socket.to(roomId).emit("restart-offer", {
+      offer: data.offer,
+
+      from: socket.user.id,
+    });
   });
 
   /**
-   * ICE RESTART ANSWER
+   * ICE restart answer
    */
   socket.on("restart-answer", (data) => {
-    try {
-      if (!data || !data.roomId || !data.answer) {
-        logger.error("Invalid restart answer data", data);
-        return;
-      }
+    if (!data?.answer || !validateRoom(data)) return;
 
-      logger.info("🔄 ICE restart answer forwarded", { roomId: data.roomId });
-      socket.to(data.roomId).emit("restart-answer", {
-        answer: data.answer,
-        from: data.from,
-      });
-    } catch (error) {
-      logger.error("Restart answer relay failed", error);
-    }
+    const roomId = getRoomId();
+
+    socket.to(roomId).emit("restart-answer", {
+      answer: data.answer,
+
+      from: socket.user.id,
+    });
   });
 };

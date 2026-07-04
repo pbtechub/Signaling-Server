@@ -1,46 +1,39 @@
-// const registerHandRaise = (io, socket) => {
-//   socket.on("raise-hand", (data) => {
-//     console.log("Hand raise:", socket.id, data.roomId);
-
-//     socket.to(data.roomId).emit("hand-raised", {
-//       userId: socket.id,
-//     });
-//   });
-// };
-
-// module.exports = registerHandRaise;
-
-// socket/handRaise.socket.js
-
 const logger = {
   info: (msg, data) => console.log(`[HAND RAISE] ${msg}`, data || ""),
-  error: (msg, error) => console.error(`[HAND RAISE ERROR] ${msg}`, error || ""),
+  error: (msg, error) =>
+    console.error(`[HAND RAISE ERROR] ${msg}`, error || ""),
 };
 
 module.exports = (io, socket) => {
   socket.on("raise-hand", (data) => {
     try {
-      if (!data || !data.roomId) {
-        logger.error("Invalid raise-hand data", data);
+      if (!data?.roomId) {
+        logger.error("Invalid raise-hand payload", data);
         return;
       }
 
-      const userId = socket.user?.id || socket.id;
-      const userName = socket.user?.name || data.name || "Participant";
-      const userRole = socket.user?.role || data.role || "participant";
+      const user = socket.user;
 
-      logger.info("🙋 Hand raised", {
-        userId,
-        userName,
-        roomId: data.roomId,
-      });
+      if (!user) {
+        logger.error("Unauthorized hand raise");
+        return;
+      }
 
-      socket.to(data.roomId).emit("hand-raised", {
-        userId,
-        name: userName,
-        role: userRole,
+      const payload = {
+        userId: user.id,
+
+        name: user.name,
+
+        role: user.role,
+
+        profileImage: user.profileImage || null,
+
         timestamp: Date.now(),
-      });
+      };
+
+      logger.info("🙋 Hand raised", payload);
+
+      socket.to(data.roomId).emit("hand-raised", payload);
     } catch (error) {
       logger.error("Failed to handle raise-hand", error);
     }
