@@ -10,6 +10,8 @@ const registerHandRaise = require("./handRaise.socket");
 
 const registerRecordingConsent = require("./recordingConsent.socket");
 
+const registerTutorControls = require("./tutorControls.socket");
+
 module.exports = (io) => {
   io.on("connection", (socket) => {
     console.log("Connected", socket.id);
@@ -25,5 +27,7 @@ module.exports = (io) => {
     registerHandRaise(io, socket);
 
     registerRecordingConsent(io, socket);
+
+     registerTutorControls(io, socket);
   });
 };

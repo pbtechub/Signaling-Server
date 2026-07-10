@@ -36,6 +36,21 @@ const startSessionExpiryWatcher = (io, roomId) => {
   activeWatchers.set(roomId, interval);
 };
 
+/**
+ * ============================================================
+ * Stop Session Expiry Watcher
+ * Used when a session ends early (tutor manually ends it) so the
+ * per-room interval doesn't keep ticking forever with nothing to do.
+ * ============================================================
+ */
+const stopSessionExpiryWatcher = (roomId) => {
+  if (activeWatchers.has(roomId)) {
+    clearInterval(activeWatchers.get(roomId));
+    activeWatchers.delete(roomId);
+  }
+};
+
 module.exports = {
   startSessionExpiryWatcher,
+  stopSessionExpiryWatcher,
 };
