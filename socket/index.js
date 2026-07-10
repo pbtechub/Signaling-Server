@@ -8,6 +8,8 @@ const sessionSocket = require("./session.socket");
 
 const registerHandRaise = require("./handRaise.socket");
 
+const registerRecordingConsent = require("./recordingConsent.socket");
+
 module.exports = (io) => {
   io.on("connection", (socket) => {
     console.log("Connected", socket.id);
@@ -20,6 +22,8 @@ module.exports = (io) => {
 
     sessionSocket(io, socket);
 
-    registerHandRaise(io,socket);
+    registerHandRaise(io, socket);
+
+    registerRecordingConsent(io, socket);
   });
 };
