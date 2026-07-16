@@ -95,6 +95,28 @@ const addUser = (roomId, user, socketId, session = {}) => {
  * Remove User
  * ============================================================
  */
+// const removeUser = (roomId, userId) => {
+//   const room = getRoom(roomId);
+
+//   if (!room) return;
+
+//   storeRemoveUser(roomId, userId);
+
+//   const participantCount = Object.values(room.users).filter(Boolean).length;
+
+//   /**
+//    * Destroy room when empty
+//    */
+//   if (participantCount === 0) {
+//     removeRoom(roomId);
+//   }
+// };
+
+/**
+ * ============================================================
+ * Remove User
+ * ============================================================
+ */
 const removeUser = (roomId, userId) => {
   const room = getRoom(roomId);
 
@@ -104,11 +126,27 @@ const removeUser = (roomId, userId) => {
 
   const participantCount = Object.values(room.users).filter(Boolean).length;
 
-  /**
-   * Destroy room when empty
-   */
   if (participantCount === 0) {
-    removeRoom(roomId);
+    /**
+     * THIS WAS THE SESSION-TIMER BUG: removeRoom() deletes the whole
+     * room object - including the precomputed startedAt/endsAt/
+     * warningSent/autoStartEligible fields set once at room creation
+     * from the booking's scheduled start/end. Calling it unconditionally
+     * on every "0 participants" moment meant a page refresh, a brief
+     * network drop, or React StrictMode's double-invoke in dev could
+     * silently wipe the session's schedule mid-countdown.
+     *
+     * Fix: a room tied to a real scheduled booking (autoStartEligible)
+     * must survive a participant dropping to zero - only clean it up
+     * once the session has genuinely ended. Ad-hoc/test rooms with no
+     * real schedule have no other way to get cleaned up, so those are
+     * still removed immediately on empty to avoid leaking memory.
+     */
+    const shouldPreserve = room.autoStartEligible && room.status !== "ended";
+
+    if (!shouldPreserve) {
+      removeRoom(roomId);
+    }
   }
 };
 
